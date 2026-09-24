@@ -1,0 +1,42 @@
+# Minimal working example for the verified Yardian Pro (PRO1906) entities.
+#
+# Add the card resource once (Settings -> Dashboards -> Resources):
+#   url: /local/yardian-card/yardian-card.js
+#   type: module
+#
+# Zone controls are timed manual-run commands (see docs/ARCHITECTURE.md):
+# pressing Run calls yardian.start_irrigation with the selected duration.
+# There is no ON/OFF toggle. `image:` is optional per zone; if omitted or
+# if it fails to load, a placeholder is shown instead.
+#
+# Then add this card to a dashboard view.
+
+type: custom:yardian-card
+title: Yardian
+zones:
+  - entity: switch.backyard_far
+    name: Backyard Far
+    image: /local/yardian-card/zones/backyard-far.jpg
+
+  - entity: switch.backyard_middle
+    name: Backyard Middle
+    image: /local/yardian-card/zones/backyard-middle.jpg
+
+  - entity: switch.backyard_near
+    name: Backyard Near
+    image: /local/yardian-card/zones/backyard-near.jpg
+
+  - entity: switch.dead_zone_1
+    name: Front Drip
+    image: /local/yardian-card/zones/front-drip.jpg
+
+  - entity: switch.dead_zone_2
+    name: Front Sprinklers
+    image: /local/yardian-card/zones/front-sprinklers.jpg
+controller:
+  rain_delay_entity: sensor.yardian_smart_sprinkler_controller_rain_delay
+  active_zones_entity: sensor.yardian_smart_sprinkler_controller_active_zones
+  watering_running_entity: binary_sensor.yardian_smart_sprinkler_controller_watering_running
+  freeze_prevent_entity: binary_sensor.yardian_smart_sprinkler_controller_freeze_prevent
+  standby_entity: binary_sensor.yardian_smart_sprinkler_controller_standby
+  stop_irrigation_entity: button.backyard_yardian_smart_sprinkler_controller_stop_irrigation

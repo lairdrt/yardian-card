@@ -1,0 +1,16 @@
+# Example theme showing only the yardian-card-specific override surface.
+# Merge the variables below into an existing theme's `modes.light` /
+# `modes.dark` (or top-level) block in themes.yaml -- this file is not a
+# complete, standalone theme.
+#
+# See docs/theming.md for the full list of --yardian-* variables and the
+# standard Home Assistant variables each one falls back to.
+
+yardian-card-example:
+  modes:
+    light:
+      yardian-accent-color: "#1b998b"
+      yardian-warning-color: "#c0392b"
+    dark:
+      yardian-accent-color: "#4fd1c5"
+      yardian-warning-color: "#ff6b6b"
