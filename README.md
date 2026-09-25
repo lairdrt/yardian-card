@@ -268,7 +268,7 @@ Controller entity IDs are also used, first, to find the controller device for
 the Model tile.
 
 Run durations are fixed in the card: the dropdown offers 5, 10, 15, 20, 30,
-45, and 60 minutes (default 10), and the quick buttons offer 5, 10, 20, and
+45, and 60 minutes (default 5), and the quick buttons offer 5, 10, 20, and
 30. They are not configurable.
 
 ## Zone images
@@ -302,7 +302,7 @@ below it the photo on the left and the status and controls on the right:
 ├─────────────┬────────────────┤
 │             │ Off            │
 │             │ Last active: … │
-│   PHOTO     │ [ 10 min ▼ ]   │
+│   PHOTO     │ [ 5 min ▼ ]    │
 │             │ [ ▶ RUN ]      │
 │             │ (5)(10)(20)(30)│
 └─────────────┴────────────────┘

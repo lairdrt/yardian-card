@@ -28,7 +28,7 @@ export function isZoneOn(entity: HassEntity | undefined): boolean {
 
 /** Fixed set of selectable manual-run durations, per milestone spec. */
 export const ZONE_RUN_DURATIONS_MINUTES: readonly number[] = [5, 10, 15, 20, 30, 45, 60];
-export const DEFAULT_ZONE_RUN_DURATION_MINUTES = 10;
+export const DEFAULT_ZONE_RUN_DURATION_MINUTES = 5;
 
 /**
  * Shortcut durations surfaced as buttons. A strict subset of
