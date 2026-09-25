@@ -12,34 +12,54 @@
  * --yardian-zone-tile-min-width for zone tiles, since a zone tile
  * carries a photo + dropdown a status chip doesn't), so both show as
  * many tiles per row as comfortably fit and wrap gracefully otherwise.
+ *
+ * Variable layering: the public --yardian-* names are never declared
+ * here, only read. Declaring them on :host would shadow any value a
+ * theme sets (theme variables reach the card by inheritance, and a
+ * declaration on the element always beats an inherited value). Instead
+ * each public name seeds a private --_yardian-* token, in the order
+ * Yardian override -> HA semantic variable(s) -> literal fallback, and
+ * component rules read only the private tokens.
+ *
+ * Surface layers: card (--_yardian-background) -> tile
+ * (--_yardian-surface-color, outlined by --_yardian-tile-border-color so
+ * tiles stay visible when a theme makes card and secondary backgrounds
+ * identical) -> nested controls/photo (card background again, outlined
+ * by --_yardian-border-color) -> detail overlay.
  */
 export const CARD_STYLES = `
   :host {
-    --yardian-background: var(--ha-card-background, var(--card-background-color, #ffffff));
-    --yardian-surface-color: var(--secondary-background-color, rgba(0, 0, 0, 0.04));
-    --yardian-text-primary: var(--primary-text-color, #212121);
-    --yardian-text-secondary: var(--secondary-text-color, #727272);
-    --yardian-border-color: var(--divider-color, #e0e0e0);
-    --yardian-accent-color: var(--primary-color, var(--accent-color, #03a9f4));
-    --yardian-warning-color: var(--error-color, #db4437);
+    --_yardian-background: var(--yardian-background, var(--ha-card-background, var(--card-background-color, #ffffff)));
+    --_yardian-surface-color: var(--yardian-surface-color, var(--secondary-background-color, rgba(0, 0, 0, 0.04)));
+    --_yardian-text-primary: var(--yardian-text-primary, var(--primary-text-color, #212121));
+    --_yardian-text-secondary: var(--yardian-text-secondary, var(--secondary-text-color, #727272));
+    --_yardian-border-color: var(--yardian-border-color, var(--divider-color, #e0e0e0));
+    --_yardian-tile-border-color: var(--yardian-tile-border-color, var(--_yardian-border-color));
+    --_yardian-accent-color: var(--yardian-accent-color, var(--primary-color, var(--accent-color, #03a9f4)));
+    --_yardian-warning-color: var(--yardian-warning-color, var(--error-color, #db4437));
+    /* Text on a filled accent/warning button. --mdc-theme-on-primary is
+       HA's "on primary" color (it defaults to --text-primary-color in the
+       stock themes, so they render exactly as before); some themes set
+       --text-primary-color to a light grey that matches a light
+       --primary-color, and set --mdc-theme-on-primary correctly. */
+    --_yardian-action-foreground: var(--yardian-action-foreground, var(--mdc-theme-on-primary, var(--text-primary-color, #ffffff)));
 
     /* Controller-tile sizing primitive (.chip-grid). */
-    --yardian-tile-min-width: 120px;
-    --yardian-tile-gap: 6px;
+    --_yardian-tile-min-width: var(--yardian-tile-min-width, 120px);
+    --_yardian-tile-gap: var(--yardian-tile-gap, 6px);
     /* Zone-tile sizing: wide enough for the photo column + the
        status/controls column (.zone-body) side by side without crushing
        either. Zone tiles intentionally use their own minimum, not
        --yardian-tile-min-width -- they carry more content per tile than
-       a controller status chip. Unchanged, so the outer grid wraps
-       exactly as before. */
-    --yardian-zone-tile-min-width: 240px;
+       a controller status chip. */
+    --_yardian-zone-tile-min-width: var(--yardian-zone-tile-min-width, 240px);
 
     display: block;
   }
 
   ha-card {
-    background: var(--yardian-background);
-    color: var(--yardian-text-primary);
+    background: var(--_yardian-background);
+    color: var(--_yardian-text-primary);
     font-family: var(--paper-font-body1_-_font-family, inherit);
     padding: 12px 16px 16px;
   }
@@ -54,7 +74,7 @@ export const CARD_STYLES = `
 
   .build {
     font-size: 0.68em;
-    color: var(--yardian-text-secondary);
+    color: var(--_yardian-text-secondary);
     font-family: var(--code-font-family, monospace);
     opacity: 0.7;
     white-space: nowrap;
@@ -68,7 +88,7 @@ export const CARD_STYLES = `
     font-size: 0.72em;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: var(--yardian-text-secondary);
+    color: var(--_yardian-text-secondary);
     margin-bottom: 5px;
   }
 
@@ -79,7 +99,7 @@ export const CARD_STYLES = `
 
   .zone-list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(var(--yardian-zone-tile-min-width), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(var(--_yardian-zone-tile-min-width), 1fr));
     gap: 8px;
   }
 
@@ -93,14 +113,17 @@ export const CARD_STYLES = `
     gap: 6px;
     padding: 8px;
     border-radius: 6px;
-    background: var(--yardian-surface-color);
-    border: 1px solid transparent;
+    background: var(--_yardian-surface-color);
+    border: 1px solid var(--_yardian-tile-border-color);
     min-width: 0;
     container-type: inline-size;
     container-name: zone-tile;
   }
 
-  .zone-row.zone-unused {
+  /* Dim the tile's content, not the tile itself, so an unused tile's
+     surface and border keep the same strength as its neighbours and it
+     doesn't fade into a dark card background. */
+  .zone-row.zone-unused > * {
     opacity: 0.55;
   }
 
@@ -114,12 +137,12 @@ export const CARD_STYLES = `
      Run/Stop button -- never by shading the whole tile. */
 
   .zone-row.state-unavailable {
-    border-color: color-mix(in srgb, var(--yardian-warning-color) 55%, transparent);
+    border-color: color-mix(in srgb, var(--_yardian-warning-color) 55%, transparent);
   }
 
   .zone-row.state-unavailable .zone-icon,
   .zone-row.state-unavailable .zone-state {
-    color: var(--yardian-warning-color);
+    color: var(--_yardian-warning-color);
   }
 
   .zone-row.state-unknown .zone-state {
@@ -144,7 +167,7 @@ export const CARD_STYLES = `
     font-size: 0.9em;
     font-weight: 600;
     line-height: 1.25;
-    color: var(--yardian-text-primary);
+    color: var(--_yardian-text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -174,8 +197,8 @@ export const CARD_STYLES = `
     min-width: 0;
     border-radius: 4px;
     overflow: hidden;
-    background: var(--yardian-surface-color);
-    border: 1px solid var(--yardian-border-color);
+    background: var(--_yardian-surface-color);
+    border: 1px solid var(--_yardian-border-color);
   }
 
   .zone-photo-img {
@@ -193,7 +216,7 @@ export const CARD_STYLES = `
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--yardian-text-secondary);
+    color: var(--_yardian-text-secondary);
   }
 
   .zone-photo-placeholder ha-icon {
@@ -220,7 +243,7 @@ export const CARD_STYLES = `
 
   .zone-icon {
     --mdc-icon-size: 18px;
-    color: var(--yardian-text-secondary);
+    color: var(--_yardian-text-secondary);
     flex-shrink: 0;
   }
 
@@ -229,7 +252,7 @@ export const CARD_STYLES = `
     font-size: 0.76em;
     font-weight: 600;
     letter-spacing: 0.02em;
-    color: var(--yardian-text-secondary);
+    color: var(--_yardian-text-secondary);
   }
 
   .zone-panel .zone-last-active {
@@ -283,9 +306,9 @@ export const CARD_STYLES = `
     box-sizing: border-box;
     padding: 0 4px 0 6px;
     border-radius: 6px;
-    border: 1px solid var(--yardian-border-color);
-    background: var(--yardian-background);
-    color: var(--yardian-text-primary);
+    border: 1px solid var(--_yardian-border-color);
+    background: var(--_yardian-background);
+    color: var(--_yardian-text-primary);
     font-size: 0.78em;
     font-family: inherit;
   }
@@ -303,7 +326,7 @@ export const CARD_STYLES = `
     padding: 7px 12px;
     border: none;
     border-radius: 6px;
-    color: var(--text-primary-color, #ffffff);
+    color: var(--_yardian-action-foreground);
     font-size: 0.78em;
     font-weight: 600;
     letter-spacing: 0.03em;
@@ -312,11 +335,11 @@ export const CARD_STYLES = `
   }
 
   .zone-action-btn.zone-run-btn {
-    background: var(--yardian-accent-color);
+    background: var(--_yardian-accent-color);
   }
 
   .zone-action-btn.zone-stop-btn {
-    background: var(--yardian-warning-color);
+    background: var(--_yardian-warning-color);
   }
 
   .zone-action-btn ha-icon {
@@ -343,9 +366,9 @@ export const CARD_STYLES = `
     width: 100%;
     padding: 8px 12px;
     border-radius: var(--ha-card-border-radius, 8px);
-    border: 1px solid var(--yardian-warning-color);
-    background: color-mix(in srgb, var(--yardian-warning-color) 12%, transparent);
-    color: var(--yardian-warning-color);
+    border: 1px solid var(--_yardian-warning-color);
+    background: color-mix(in srgb, var(--_yardian-warning-color) 12%, transparent);
+    color: var(--_yardian-warning-color);
     cursor: pointer;
   }
 
@@ -384,23 +407,26 @@ export const CARD_STYLES = `
 
   .chip-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(var(--yardian-tile-min-width), 1fr));
-    gap: var(--yardian-tile-gap);
+    grid-template-columns: repeat(auto-fit, minmax(var(--_yardian-tile-min-width), 1fr));
+    gap: var(--_yardian-tile-gap);
   }
 
   .chip {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 8px;
+    /* 1px less padding than before on each side to absorb the 1px border,
+       so the chip's outer size is unchanged. */
+    padding: 5px 7px;
     border-radius: 6px;
-    background: var(--yardian-surface-color);
+    background: var(--_yardian-surface-color);
+    border: 1px solid var(--_yardian-tile-border-color);
     min-width: 0;
   }
 
   .chip-icon {
     --mdc-icon-size: 18px;
-    color: var(--yardian-text-secondary);
+    color: var(--_yardian-text-secondary);
     flex-shrink: 0;
   }
 
@@ -412,13 +438,13 @@ export const CARD_STYLES = `
     font-size: 0.66em;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    color: var(--yardian-text-secondary);
+    color: var(--_yardian-text-secondary);
   }
 
   .chip-value {
     font-size: 0.85em;
     font-weight: 600;
-    color: var(--yardian-text-primary);
+    color: var(--_yardian-text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -426,12 +452,12 @@ export const CARD_STYLES = `
 
   .chip.state-on .chip-icon,
   .chip.state-on .chip-value {
-    color: var(--yardian-accent-color);
+    color: var(--_yardian-accent-color);
   }
 
   .chip.state-unavailable .chip-icon,
   .chip.state-unavailable .chip-value {
-    color: var(--yardian-warning-color);
+    color: var(--_yardian-warning-color);
   }
 
   .chip.state-missing .chip-icon,
@@ -447,14 +473,23 @@ export const CARD_STYLES = `
     cursor: pointer;
   }
 
+  /* Keyboard focus: an offset accent outline, kept outside the control
+     so it never reads as the selected quick-duration state (an inset
+     ring) and stays visible on filled Run/Stop buttons. */
+  button:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--_yardian-accent-color);
+    outline-offset: 2px;
+  }
+
   /* Provable card-issued attribution (see _reconcileStartedHere). */
 
   .zone-source {
     margin-left: 6px;
     padding: 1px 5px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--yardian-accent-color) 16%, transparent);
-    color: var(--yardian-accent-color);
+    background: color-mix(in srgb, var(--_yardian-accent-color) 16%, transparent);
+    color: var(--_yardian-accent-color);
     font-size: 0.86em;
     font-weight: 600;
     letter-spacing: 0;
@@ -462,7 +497,7 @@ export const CARD_STYLES = `
 
   .zone-last-active {
     font-size: 0.7em;
-    color: var(--yardian-text-secondary);
+    color: var(--_yardian-text-secondary);
     opacity: 0.85;
     white-space: nowrap;
     overflow: hidden;
@@ -478,7 +513,7 @@ export const CARD_STYLES = `
     gap: 4px;
     font-size: 0.7em;
     line-height: 1.25;
-    color: var(--yardian-text-secondary);
+    color: var(--_yardian-text-secondary);
   }
 
   .zone-conditions ha-icon {
@@ -499,19 +534,23 @@ export const CARD_STYLES = `
     min-width: 30px;
     padding: 3px 7px;
     border-radius: 999px;
-    border: 1px solid var(--yardian-border-color);
+    border: 1px solid var(--_yardian-border-color);
     background: transparent;
-    color: var(--yardian-text-secondary);
+    color: var(--_yardian-text-secondary);
     font-size: 0.72em;
     font-weight: 600;
     font-family: inherit;
     cursor: pointer;
   }
 
+  /* Selected: accent border doubled by an inset ring (no size change) plus
+     a tint, so it stays obvious when the accent is a grey that sits close
+     to the unselected border/text colors (monochrome/e-ink themes). */
   .zone-quick-btn.is-selected {
-    border-color: var(--yardian-accent-color);
-    background: color-mix(in srgb, var(--yardian-accent-color) 16%, transparent);
-    color: var(--yardian-accent-color);
+    border-color: var(--_yardian-accent-color);
+    box-shadow: inset 0 0 0 1px var(--_yardian-accent-color);
+    background: color-mix(in srgb, var(--_yardian-accent-color) 20%, transparent);
+    color: var(--_yardian-accent-color);
   }
 
   .zone-quick-btn:disabled {
@@ -532,7 +571,7 @@ export const CARD_STYLES = `
 
   .activity-item {
     font-size: 0.76em;
-    color: var(--yardian-text-secondary);
+    color: var(--_yardian-text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -561,8 +600,11 @@ export const CARD_STYLES = `
     gap: 10px;
     padding: 16px;
     border-radius: var(--ha-card-border-radius, 8px);
-    background: var(--yardian-background);
-    color: var(--yardian-text-primary);
+    background: var(--_yardian-background);
+    color: var(--_yardian-text-primary);
+    /* The border keeps the panel separate from the backdrop when the
+       card background is as dark as the dimmed page behind it. */
+    border: 1px solid var(--_yardian-tile-border-color);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
   }
 
@@ -591,7 +633,7 @@ export const CARD_STYLES = `
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: var(--yardian-text-secondary);
+    color: var(--_yardian-text-secondary);
     cursor: pointer;
   }
 
@@ -609,25 +651,25 @@ export const CARD_STYLES = `
     justify-content: space-between;
     gap: 12px;
     font-size: 0.85em;
-    color: var(--yardian-text-secondary);
+    color: var(--_yardian-text-secondary);
   }
 
   .zone-detail-row span:last-child {
-    color: var(--yardian-text-primary);
+    color: var(--_yardian-text-primary);
     font-weight: 600;
     text-align: right;
   }
 
   .zone-detail-row .state-on {
-    color: var(--yardian-accent-color);
+    color: var(--_yardian-accent-color);
   }
 
   .zone-detail-source {
     align-self: flex-start;
     padding: 2px 8px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--yardian-accent-color) 16%, transparent);
-    color: var(--yardian-accent-color);
+    background: color-mix(in srgb, var(--_yardian-accent-color) 16%, transparent);
+    color: var(--_yardian-accent-color);
     font-size: 0.74em;
     font-weight: 600;
   }
@@ -637,7 +679,7 @@ export const CARD_STYLES = `
     flex-direction: column;
     gap: 4px;
     padding-top: 6px;
-    border-top: 1px solid var(--yardian-border-color);
+    border-top: 1px solid var(--_yardian-border-color);
   }
 
   .zone-detail-more-info {
@@ -647,10 +689,10 @@ export const CARD_STYLES = `
     gap: 6px;
     width: 100%;
     padding: 8px 12px;
-    border: 1px solid var(--yardian-border-color);
+    border: 1px solid var(--_yardian-border-color);
     border-radius: 6px;
     background: transparent;
-    color: var(--yardian-text-primary);
+    color: var(--_yardian-text-primary);
     font-size: 0.8em;
     font-weight: 600;
     font-family: inherit;
@@ -662,7 +704,7 @@ export const CARD_STYLES = `
   }
 
   .card-error {
-    color: var(--yardian-warning-color);
+    color: var(--_yardian-warning-color);
     white-space: pre-wrap;
     font-family: var(--code-font-family, monospace);
     font-size: 0.9em;

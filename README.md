@@ -550,7 +550,9 @@ your active theme in light and dark mode. `card-mod` is not required.
 | Primary text | `--yardian-text-primary` | `--primary-text-color` |
 | Secondary text | `--yardian-text-secondary` | `--secondary-text-color` |
 | Borders, dividers | `--yardian-border-color` | `--divider-color` |
+| Tile and panel outline | `--yardian-tile-border-color` | `--yardian-border-color` |
 | Action/active color | `--yardian-accent-color` | `--primary-color`, then `--accent-color` |
+| Text on Run/Stop buttons | `--yardian-action-foreground` | `--mdc-theme-on-primary`, then `--text-primary-color` |
 | Stop / warning color | `--yardian-warning-color` | `--error-color` |
 
 Layout variables can also be overridden:
@@ -565,11 +567,12 @@ How the colors are used:
 
 - **Accent:** the Run button background, the selected quick duration,
   "Started here", and controller tiles that are on. Button text uses
-  `--text-primary-color`.
+  `--yardian-action-foreground`.
 - **Warning:** the Stop button, the Stop Irrigation bar (border, text, and a
   light tint), and anything unavailable.
-- **Surface:** zone and controller tiles use the surface color. Running does
-  not change it.
+- **Surface:** zone and controller tiles use the surface color with a thin
+  outline, so they stay visible under dark themes whose card and tile
+  backgrounds are identical. Running does not change either.
 
 Theme variables go in a Home Assistant theme (`frontend: themes:` in
 `configuration.yaml`) without the leading `--`, and apply when that theme is
@@ -580,8 +583,10 @@ modes, for merging into an existing theme.
 
 Because the card honors your theme rather than imposing its own palette,
 unusual third-party themes can produce low-contrast combinations, for example
-a pale `--primary-color` behind `--text-primary-color`. Override the relevant
-`yardian-*` variable in your theme if that happens.
+a faint `--divider-color` or a pale `--primary-color` with no contrasting
+button-text color. Override the relevant `yardian-*` variable in your theme
+if that happens. See [docs/theming.md](docs/theming.md) for the full fallback
+chains.
 
 ## Troubleshooting
 
