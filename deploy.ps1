@@ -1,157 +1,151 @@
-param(
-    [string]$HaConfigDrive = "Z:",
-    [switch]$SkipBuild,
-    [switch]$NoSourceMap
-)
+# EDIT THIS VALUE before first use if your Home Assistant mapped drive differs.
+# The Samba share exposes Home Assistant's /config directory directly.
+$HaConfigShare = "Z:"
 
-$ErrorActionPreference = "Stop"
-Set-StrictMode -Version Latest
+$SourceFile = Join-Path $PSScriptRoot "dist\yardian-card.js"
+$LoaderSourceFile = Join-Path $PSScriptRoot "loader.js"
+$HaWwwDirectory = Join-Path $HaConfigShare "www\yardian-card"
+$DestinationFile = Join-Path $HaWwwDirectory "yardian-card.js"
+$LoaderDestinationFile = Join-Path $HaWwwDirectory "loader.js"
 
-function Step([string]$Message) {
-    Write-Host ""
-    Write-Host "==> $Message" -ForegroundColor Cyan
+Write-Host "Local source: $SourceFile"
+Write-Host "HA destination: $DestinationFile"
+Write-Host "Loader source: $LoaderSourceFile"
+Write-Host "Loader destination: $LoaderDestinationFile"
+
+# Yardian-specific: the deployable module is compiled from TypeScript, so
+# build it first. Output is only shown if the build fails.
+Push-Location -LiteralPath $PSScriptRoot
+try { $BuildOutput = & npm run build 2>&1 }
+finally { Pop-Location }
+if ($LASTEXITCODE -ne 0) {
+    $BuildOutput | ForEach-Object { Write-Host $_ }
+    Write-Error "Failed to build the Yardian card: npm run build exited with code $LASTEXITCODE"
+    exit 1
 }
 
-function Require-Command([string]$Name) {
-    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-        throw "Required command '$Name' was not found in PATH."
+if (-not (Test-Path -LiteralPath $SourceFile -PathType Leaf)) {
+    Write-Error "Local source file does not exist: $SourceFile"
+    exit 1
+}
+
+if (-not (Test-Path -LiteralPath $LoaderSourceFile -PathType Leaf)) {
+    Write-Error "Local loader file does not exist: $LoaderSourceFile"
+    exit 1
+}
+
+if (-not (Test-Path -LiteralPath $HaConfigShare -PathType Container)) {
+    Write-Error "Home Assistant Samba share is not accessible: $HaConfigShare"
+    exit 1
+}
+
+if (-not (Test-Path -LiteralPath $HaWwwDirectory -PathType Container)) {
+    Write-Error "Home Assistant www directory does not exist: $HaWwwDirectory"
+    exit 1
+}
+
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Error "Git is not available. Install Git or add it to PATH before deploying."
+    exit 1
+}
+
+$ShortHash = & git -C $PSScriptRoot rev-parse --short HEAD 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Failed to obtain the Git commit hash: $ShortHash"
+    exit 1
+}
+$ShortHash = ($ShortHash | Out-String).Trim()
+
+$Placeholder = "__YARDIAN_BUILD__"
+
+try {
+    # -Encoding UTF8: the bundle contains non-ASCII characters, which
+    # Windows PowerShell 5.1 would otherwise misread as the ANSI code page.
+    $SourceContent = Get-Content -LiteralPath $SourceFile -Raw -Encoding UTF8 -ErrorAction Stop
+
+    $DeployedSourceFiles = @(
+        Get-Item -LiteralPath $SourceFile -ErrorAction Stop
+        Get-Item -LiteralPath $LoaderSourceFile -ErrorAction Stop
+    ) | Sort-Object FullName
+
+    $SourceRoot = (Resolve-Path -LiteralPath $PSScriptRoot).Path.TrimEnd("\") + "\"
+    $ManifestLines = $DeployedSourceFiles | ForEach-Object {
+        $RelativePath = $_.FullName.Substring($SourceRoot.Length).Replace("\", "/")
+        $FileHash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+        "$RelativePath|$FileHash"
     }
-}
+    $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $ManifestBytes = $Utf8NoBom.GetBytes(($ManifestLines -join "`n"))
+    $Sha256 = [System.Security.Cryptography.SHA256]::Create()
 
-$ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$DistDir     = Join-Path $ProjectRoot "dist"
-$Bundle      = Join-Path $DistDir "yardian-card.js"
-$SourceMap   = Join-Path $DistDir "yardian-card.js.map"
-$BuildInfo   = Join-Path $DistDir "build-info.json"
-
-# Z: is the Home Assistant /config directory via Samba.
-$RemoteDir   = Join-Path $HaConfigDrive "www\yardian-card"
-$RemoteJs    = Join-Path $RemoteDir "yardian-card.js"
-$RemoteMap   = Join-Path $RemoteDir "yardian-card.js.map"
-$DeployInfo  = Join-Path $RemoteDir "deploy.txt"
-
-Set-Location $ProjectRoot
-
-Require-Command "npm"
-
-if (-not $SkipBuild) {
-    Step "Building yardian-card"
-    npm run build
-    if ($LASTEXITCODE -ne 0) {
-        throw "npm run build failed."
+    try {
+        $ManifestHash = ([BitConverter]::ToString($Sha256.ComputeHash($ManifestBytes))).Replace("-", "").ToLowerInvariant()
     }
+    finally {
+        $Sha256.Dispose()
+    }
+
+    $WorkingTreeHash = $ManifestHash.Substring(0, 6)
+    $BuildIdentifier = "YARDIAN $ShortHash-$WorkingTreeHash"
+
+    Write-Host "Deploying build: $BuildIdentifier"
+
+    if (-not $SourceContent.Contains($Placeholder)) {
+        Write-Error "Build placeholder was not found in the source file: $Placeholder"
+        exit 1
+    }
+
+    $DeployedContent = $SourceContent.Replace($Placeholder, $BuildIdentifier)
+    $DeployedBytes = $Utf8NoBom.GetBytes($DeployedContent)
+    [System.IO.File]::WriteAllBytes($DestinationFile, $DeployedBytes)
+    Copy-Item -LiteralPath $LoaderSourceFile -Destination $LoaderDestinationFile -Force -ErrorAction Stop
+}
+catch {
+    Write-Error "Failed to deploy Yardian card files: $($_.Exception.Message)"
+    exit 1
 }
 
-if (-not (Test-Path $Bundle)) {
-    throw "Build artifact not found: $Bundle"
+if (-not (Test-Path -LiteralPath $DestinationFile -PathType Leaf)) {
+    Write-Error "Destination file does not exist after deployment: $DestinationFile"
+    exit 1
 }
 
-if (-not (Test-Path $BuildInfo)) {
-    throw "Build metadata not found: $BuildInfo (expected to be generated by 'npm run build')."
+if (-not (Test-Path -LiteralPath $LoaderDestinationFile -PathType Leaf)) {
+    Write-Error "Loader destination file does not exist after deployment: $LoaderDestinationFile"
+    exit 1
 }
 
-# The build tag is generated exactly once, by vite.config.ts, and embedded
-# directly into yardian-card.js. It is read here, never recomputed, so it
-# always matches exactly what the browser will render.
-$BuildTag = (Get-Content $BuildInfo -Raw | ConvertFrom-Json).buildTag
-if ([string]::IsNullOrWhiteSpace($BuildTag)) {
-    throw "build-info.json did not contain a 'buildTag' value."
+$DestinationSize = (Get-Item -LiteralPath $DestinationFile).Length
+
+if ($DeployedBytes.Length -ne $DestinationSize) {
+    Write-Error "File size verification failed. Expected: $($DeployedBytes.Length) bytes; destination: $DestinationSize bytes."
+    exit 1
 }
 
-if (-not (Test-Path $HaConfigDrive)) {
-    throw "Home Assistant Samba drive '$HaConfigDrive' is not mounted/available."
+if ($DestinationSize -eq 0) {
+    Write-Error "Deployed yardian-card.js is empty: $DestinationFile"
+    exit 1
 }
 
-Step "Preparing Home Assistant destination"
-New-Item -ItemType Directory -Path $RemoteDir -Force | Out-Null
+$LoaderSourceSize = (Get-Item -LiteralPath $LoaderSourceFile).Length
+$LoaderDestinationSize = (Get-Item -LiteralPath $LoaderDestinationFile).Length
 
-$LocalHash = (Get-FileHash -Algorithm SHA256 $Bundle).Hash
-$ShortHash = $LocalHash.Substring(0, 12).ToLowerInvariant()
-$Size      = (Get-Item $Bundle).Length
-
-Step "Deploying yardian-card.js (build tag $BuildTag)"
-Copy-Item -Path $Bundle -Destination $RemoteJs -Force
-
-if (-not $NoSourceMap -and (Test-Path $SourceMap)) {
-    Step "Deploying source map"
-    Copy-Item -Path $SourceMap -Destination $RemoteMap -Force
-}
-elseif ($NoSourceMap -and (Test-Path $RemoteMap)) {
-    Remove-Item $RemoteMap -Force
+if ($LoaderSourceSize -eq 0 -or $LoaderDestinationSize -eq 0) {
+    Write-Error "Loader file size verification failed because the source or destination is empty."
+    exit 1
 }
 
-@"
-build_tag=$BuildTag
-sha256=$ShortHash
-bytes=$Size
-"@ | Set-Content -Path $DeployInfo -Encoding ascii
-
-Step "Verifying deployed bundle"
-if (-not (Test-Path $RemoteJs)) {
-    throw "Deployed bundle is missing: $RemoteJs"
+if ($LoaderSourceSize -ne $LoaderDestinationSize) {
+    Write-Error "Loader file size verification failed. Source: $LoaderSourceSize bytes; destination: $LoaderDestinationSize bytes."
+    exit 1
 }
 
-$RemoteHash = (Get-FileHash -Algorithm SHA256 $RemoteJs).Hash
-$RemoteSize = (Get-Item $RemoteJs).Length
+$DestinationContent = Get-Content -LiteralPath $DestinationFile -Raw -Encoding UTF8
+$ExpectedBuildLine = 'const YARDIAN_BUILD = "' + $BuildIdentifier + '";'
 
-if ($RemoteHash -ne $LocalHash) {
-    throw "Deploy verification failed: local and deployed SHA256 hashes differ."
+if (-not $DestinationContent.Contains($ExpectedBuildLine)) {
+    Write-Error "Build identifier verification failed. Expected to find: $ExpectedBuildLine"
+    exit 1
 }
 
-if ($RemoteSize -ne $Size) {
-    throw "Deploy verification failed: local bytes=$Size, deployed bytes=$RemoteSize"
-}
-
-Step "Updating Lovelace resource cache-bust query"
-
-# lovelace_resources is HA's storage-mode registry of dashboard resource
-# URLs (id/url/type records). We only ever touch the one record whose url
-# is the yardian-card bundle; every other record round-trips unchanged.
-$ResourceStore = Join-Path $HaConfigDrive ".storage\lovelace_resources"
-if (-not (Test-Path $ResourceStore)) {
-    throw "Lovelace resources storage not found: $ResourceStore"
-}
-
-$ResourceBackup = "$ResourceStore.bak.$((Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ'))"
-Copy-Item -Path $ResourceStore -Destination $ResourceBackup -Force
-
-$storageJson = (Get-Content -Path $ResourceStore -Raw) | ConvertFrom-Json
-
-# Match the yardian-card bundle URL regardless of any existing query string.
-$UrlPattern = '^/local/yardian-card/yardian-card\.js(\?.*)?$'
-$matchingItems = @($storageJson.data.items | Where-Object { $_.url -match $UrlPattern })
-
-if ($matchingItems.Count -eq 0) {
-    throw "No lovelace resource entry matches /local/yardian-card/yardian-card.js in $ResourceStore."
-}
-if ($matchingItems.Count -gt 1) {
-    throw "Found $($matchingItems.Count) lovelace resource entries matching /local/yardian-card/yardian-card.js; refusing to guess which one to update."
-}
-
-$NewResourceUrl = "/local/yardian-card/yardian-card.js?v=$ShortHash"
-$matchingItems[0].url = $NewResourceUrl
-
-# Write to a temp file in the same directory, then rename it over the
-# original so a reader never observes a partially-written file. (True
-# File.Replace-style atomic swap isn't available over the mapped SMB
-# drive -- "the path is not of a legal form" -- so Move-Item -Force is
-# the best available option here.) Written as UTF-8 *without* a BOM:
-# HA's Python JSON loader would fail to parse a leading BOM byte.
-$storageTemp = Join-Path (Split-Path -Parent $ResourceStore) "lovelace_resources.tmp"
-$storageOut  = $storageJson | ConvertTo-Json -Depth 10
-[System.IO.File]::WriteAllText($storageTemp, $storageOut, (New-Object System.Text.UTF8Encoding($false)))
-Move-Item -Path $storageTemp -Destination $ResourceStore -Force
-
-Write-Host ""
-Write-Host "DEPLOY OK" -ForegroundColor Green
-Write-Host "  Expected browser build tag: $BuildTag"
-Write-Host "  Bundle hash: $ShortHash"
-Write-Host "  Deployed: $RemoteJs"
-Write-Host "  Lovelace resource updated to: $NewResourceUrl"
-Write-Host "  Resource storage backup: $ResourceBackup"
-Write-Host ""
-Write-Host "Normal workflow:" -ForegroundColor Yellow
-Write-Host "  .\deploy.ps1"
-Write-Host ""
-Write-Host "Compare the card's visible build tag in the browser against 'Expected browser build tag' above -- they must match exactly."
-Write-Host "NOTE: Home Assistant keeps this resource list in memory; if the browser still doesn't pick up the new build tag after a normal reload, restart Home Assistant Core so it re-reads the updated resource URL." -ForegroundColor Yellow
+Write-Host "Deployment succeeded with build identifier: $BuildIdentifier"

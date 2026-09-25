@@ -1,8 +1,10 @@
 # Minimal working example for the verified Yardian Pro (PRO1906) entities.
 #
 # Add the card resource once (Settings -> Dashboards -> Resources):
-#   url: /local/yardian-card/yardian-card.js
+#   url: /local/yardian-card/loader.js
 #   type: module
+# (loader.js imports yardian-card.js with a fresh ?ts= on every page
+# load; do not register yardian-card.js itself as a resource.)
 #
 # Zone controls are timed manual-run commands (see docs/ARCHITECTURE.md):
 # pressing Run calls yardian.start_irrigation with the selected duration.

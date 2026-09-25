@@ -30,11 +30,11 @@ import {
 /**
  * Visible build identifier so it is obvious in the rendered card which
  * build Home Assistant actually loaded. See CLAUDE.md "Build and Version
- * Identification". The single authoritative value is computed once by
- * vite.config.ts and injected here verbatim -- it is the same string
- * written to dist/build-info.json for deploy.ps1 to report.
+ * Identification". The placeholder is left untouched in source and in
+ * dist/; deploy.ps1 replaces it only in the copy written to Home
+ * Assistant, with "YARDIAN <git short hash>-<manifest hash>".
  */
-export const BUILD_ID = __YARDIAN_BUILD_TAG__;
+export const YARDIAN_BUILD = "__YARDIAN_BUILD__";
 
 /**
  * How often, while the dashboard is actually visible, the card asks Home
@@ -407,7 +407,7 @@ export class YardianCard extends HTMLElement implements LovelaceCard {
         <style>${CARD_STYLES}</style>
         <ha-card>
           <div class="header">
-            <span class="build" title="yardian-card build">${escapeHtml(BUILD_ID)}</span>
+            <span class="build" title="yardian-card build">${escapeHtml(YARDIAN_BUILD)}</span>
           </div>
           <div class="card-error">${escapeHtml(this._configError)}</div>
         </ha-card>
@@ -453,7 +453,7 @@ export class YardianCard extends HTMLElement implements LovelaceCard {
         </div>
 
         <div class="header">
-          <span class="build" title="yardian-card build">${escapeHtml(BUILD_ID)}</span>
+          <span class="build" title="yardian-card build">${escapeHtml(YARDIAN_BUILD)}</span>
         </div>
       </ha-card>
       ${this._renderZoneDetailPanel(config, hass, conditions)}
