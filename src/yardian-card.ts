@@ -503,8 +503,10 @@ export class YardianCard extends HTMLElement implements LovelaceCard {
   /**
    * Off -> [duration] [Run] (calls yardian.start_irrigation on this zone).
    * On  -> [duration] [Stop] (calls button.press on the GLOBAL stop
-   * entity -- there is no per-zone stop capability, so this is never
-   * scoped to just this row, only labeled on it). Both buttons dispatch
+   * entity). The integration exposes zone turn-off, but on Yardian Pro
+   * pyYardian maps per-zone stop to the controller's global stop, so
+   * Stop is presented as a global irrigation action -- labeled on this
+   * row, never implying an isolated per-zone stop. Both buttons dispatch
    * through the same delegated click handler as before (`data-action`
    * "run-zone" / "stop-irrigation"), so `_handleRunZone` and
    * `_handleStopIrrigation` are unchanged.
