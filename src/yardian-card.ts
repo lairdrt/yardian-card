@@ -106,7 +106,7 @@ interface WateringState {
   /** Configured zones currently reporting "on", in config order. */
   runningZones: YardianZoneConfig[];
   runningZoneCount: number;
-  /** The official controller watering signal (scheduled/program runs). */
+  /** The integration's watering_running entity (derived from its active zones). */
   officialWatering: boolean;
   /** Either source indicates irrigation is running. */
   isWatering: boolean;
@@ -467,13 +467,16 @@ export class YardianCard extends HTMLElement implements LovelaceCard {
    * resolved once per render and shared by the Watering tile and the
    * global Stop bar so the two can't drift apart.
    *
-   * Two sources, because neither alone covers both ways irrigation
-   * starts: the official controller signal tracks scheduled/program runs
-   * (and is the only signal when no configured zone maps to what's
-   * running), while the configured zone switches flip immediately for
-   * manual and app-started runs and are the only source of zone
-   * identity. Only a literal "on" counts on either side -- "unknown",
-   * "unavailable" and missing entities never mean watering.
+   * Two sources, both derived upstream from the integration's single
+   * active-zones state -- this is not a scheduled-vs-manual split. The
+   * integration's HA-started turn-on optimistically mutates shared
+   * coordinator data and writes only the switch; with the coordinator's
+   * always_update=False, the confirming refresh can then compare equal
+   * and leave watering_running stale. The configured zone switches cover
+   * that case and are the only source of zone identity; the official
+   * signal still covers running zones not in this card's config. Only a
+   * literal "on" counts on either side -- "unknown", "unavailable" and
+   * missing entities never mean watering.
    */
   private _resolveWateringState(config: YardianCardConfig, hass: HomeAssistant | undefined): WateringState {
     const runningZones = config.zones.filter((zone) => isZoneOn(getEntity(hass, zone.entity)));
@@ -1084,14 +1087,17 @@ export class YardianCard extends HTMLElement implements LovelaceCard {
     watering: WateringState,
   ): ChipSpec[] {
     /*
-     * Watering and Active Zones combine two sources, because neither one
-     * alone covers both ways irrigation can start:
+     * Watering and Active Zones combine two sources. Upstream, both the
+     * official entities and the zone switches derive from the
+     * integration's active-zones state; the difference is notification,
+     * not run type:
      *
-     *  - the official controller entities track scheduled/program runs,
-     *    but the integration refreshes them on its own ~30s poll cycle,
-     *    so they lag manually-started irrigation;
-     *  - the configured zone switches flip immediately and reliably for
-     *    manual runs, and are the only source of zone identity.
+     *  - the official entities can stay stale after an HA-started run
+     *    (optimistic coordinator mutation + always_update=False means the
+     *    confirming refresh notifies no listeners), but they also count
+     *    zones not listed in this card's config;
+     *  - the configured zone switches are written immediately on
+     *    turn-on, and are the only source of zone identity.
      *
      * Watering is an OR of the two (see _resolveWateringState); Active
      * Zones is the max of the two counts, never the sum, so a single
@@ -1103,8 +1109,8 @@ export class YardianCard extends HTMLElement implements LovelaceCard {
      */
     const { runningZones, runningZoneCount, isWatering } = watering;
 
-    // Zone identity when we have it. Official-only watering (a scheduled
-    // run with no matching configured switch on) stays a bare "Running"
+    // Zone identity when we have it. Official-only watering (e.g. a zone
+    // not in this card's config) stays a bare "Running"
     // rather than guessing which zone it is.
     const runningZoneNames = runningZones.map((zone) => this._zoneLabel(zone, hass));
     const wateringValueText = !isWatering
